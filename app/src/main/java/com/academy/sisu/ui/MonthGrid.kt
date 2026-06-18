@@ -204,8 +204,9 @@ fun MonthGrid(
                         },
                         onDragCancel = {
                             if (!aborted) {
-                                vm.cancelPaint()      // 중간 취소 시 되돌리고 메시지 없음
+                                vm.commitPaint()
                                 paintActive[0] = false
+                                onToast("${count}일 ${if (add) "방학 지정" else "방학 해제"}")
                             }
                         }
                     )
