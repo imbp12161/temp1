@@ -242,16 +242,14 @@ fun StudentSheetContent(
         // 색상
         FieldLabel("표시 색상")
         Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(9.dp)
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             PALETTE.forEach { c ->
                 val sel = c == color
                 Box(
                     Modifier
-                        .size(34.dp)
+                        .size(32.dp)
                         .clip(CircleShape)
                         .background(Color(c))
                         .border(
@@ -265,7 +263,7 @@ fun StudentSheetContent(
             val isCustom = color !in PALETTE
             Box(
                 Modifier
-                    .size(34.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.sweepGradient(

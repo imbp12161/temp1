@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -106,6 +107,8 @@ fun MonthGrid(
     val paintActive = remember { BooleanArray(1) }
     // 길게 누름 직후의 탭 무시 플래그
     val suppressTap = remember { BooleanArray(1) }
+    // 가로 스와이프(달 넘김)가 감지되면 켜짐 → 방학 칠하기보다 우선
+    val horizontalLock = remember { BooleanArray(1) }
 
     val selId = vm.selected
     val isAll = selId == "all"
@@ -158,41 +161,52 @@ fun MonthGrid(
                 .fillMaxSize()
                 .pointerInput(month, selId, wPx, hPx) {
                     detectTapGestures(
-                        onPress = { suppressTap[0] = false },
+                        onPress = { suppressTap[0] = false; horizontalLock[0] = false },
                         onTap = { off -> if (!suppressTap[0]) onDayTap(cellAt(off)) }
                     )
                 }
                 .pointerInput(month, selId, wPx, hPx) {
                     var add = true
                     var count = 0
+                    var aborted = false
                     val painted = HashSet<LocalDate>()
                     detectDragGesturesAfterLongPress(
                         onDragStart = { off ->
-                            suppressTap[0] = true
-                            paintActive[0] = true
-                            painted.clear()
-                            val d = cellAt(off)
-                            add = vm.startPaint(d)
-                            painted.add(d)
-                            count = 1
-                            triggerVibrate(context)
+                            if (horizontalLock[0]) {
+                                aborted = true            // 좌우 스와이프 중 → 방학 칠하기 안 함
+                            } else {
+                                aborted = false
+                                suppressTap[0] = true
+                                paintActive[0] = true
+                                painted.clear()
+                                val d = cellAt(off)
+                                add = vm.startPaint(d)
+                                painted.add(d)
+                                count = 1
+                                triggerVibrate(context)
+                            }
                         },
                         onDrag = { change, _ ->
-                            val d = cellAt(change.position)
-                            if (painted.add(d)) {
-                                vm.paint(d)
-                                count = painted.size
+                            if (!aborted) {
+                                val d = cellAt(change.position)
+                                if (painted.add(d)) {
+                                    vm.paint(d)
+                                    count = painted.size
+                                }
                             }
                         },
                         onDragEnd = {
-                            vm.commitPaint()
-                            paintActive[0] = false
-                            onToast("${count}일 ${if (add) "방학 지정" else "방학 해제"}")
+                            if (!aborted) {
+                                vm.commitPaint()
+                                paintActive[0] = false
+                                onToast("${count}일 ${if (add) "방학 지정" else "방학 해제"}")
+                            }
                         },
                         onDragCancel = {
-                            vm.commitPaint()
-                            paintActive[0] = false
-                            onToast("${count}일 ${if (add) "방학 지정" else "방학 해제"}")
+                            if (!aborted) {
+                                vm.cancelPaint()      // 중간 취소 시 되돌리고 메시지 없음
+                                paintActive[0] = false
+                            }
                         }
                     )
                 }
@@ -201,7 +215,10 @@ fun MonthGrid(
                     var allowed = false
                     detectHorizontalDragGestures(
                         onDragStart = { dx = 0f; allowed = !paintActive[0] },
-                        onHorizontalDrag = { _, d -> dx += d },
+                        onHorizontalDrag = { _, d ->
+                            dx += d
+                            horizontalLock[0] = true
+                        },
                         onDragEnd = {
                             if (allowed && abs(dx) > wPx * 0.16f) {
                                 if (dx > 0f) onPrevMonth() else onNextMonth()
@@ -274,81 +291,83 @@ private fun DayCell(model: CellModel, modifier: Modifier) {
             )
         }
 
-        // 숫자(+원판) 와 공휴일 글씨를 세로로 쌓아 겹치지 않게
-        Column(
-            Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                val discColor = when {
-                    model.classColor != null -> model.classColor
-                    model.skip -> RedC.copy(alpha = 0.20f)
-                    else -> Color.Transparent
-                }
-                val discBorder = when {
-                    model.endDay -> Modifier.border(2.4.dp, MagC, CircleShape)
-                    model.isToday -> Modifier.border(1.6.dp, TextCol.copy(alpha = 0.55f), CircleShape)
-                    model.skip -> Modifier.border(1.4.dp, RedC.copy(alpha = 0.55f), CircleShape)
-                    else -> Modifier
-                }
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .clip(CircleShape)
-                        .background(discColor)
-                        .then(discBorder)
-                )
-                val numColor = when {
-                    model.classColor != null || model.endDay -> Color.White
-                    model.skip -> SkipText
-                    model.holName != null && model.holActive -> RedText
-                    !model.inMonth -> DimCol
-                    model.date.dayOfWeek == DayOfWeek.SUNDAY -> SunC
-                    model.date.dayOfWeek == DayOfWeek.SATURDAY -> SatC
-                    else -> TextCol
-                }
-                val numWeight = when {
-                    model.isToday -> FontWeight.Black
-                    model.classColor != null || model.endDay -> FontWeight.Bold
-                    else -> FontWeight.Medium
-                }
-                Text(
-                    text = model.date.dayOfMonth.toString(),
-                    color = numColor,
-                    fontSize = 14.5.sp,
-                    fontWeight = numWeight
-                )
+        // 숫자(+원판): 항상 정중앙 고정
+        Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+            val discColor = when {
+                model.classColor != null -> model.classColor
+                model.skip -> RedC.copy(alpha = 0.20f)
+                else -> Color.Transparent
             }
+            val discBorder = when {
+                model.endDay -> Modifier.border(2.4.dp, MagC, CircleShape)
+                model.isToday -> Modifier.border(1.6.dp, TextCol.copy(alpha = 0.55f), CircleShape)
+                model.skip -> Modifier.border(1.4.dp, RedC.copy(alpha = 0.55f), CircleShape)
+                else -> Modifier
+            }
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .background(discColor)
+                    .then(discBorder)
+            )
+            val numColor = when {
+                model.classColor != null || model.endDay -> Color.White
+                model.skip -> SkipText
+                model.holName != null && model.holActive -> RedText
+                !model.inMonth -> DimCol
+                model.date.dayOfWeek == DayOfWeek.SUNDAY -> SunC
+                model.date.dayOfWeek == DayOfWeek.SATURDAY -> SatC
+                else -> TextCol
+            }
+            val numWeight = when {
+                model.isToday -> FontWeight.Black
+                model.classColor != null || model.endDay -> FontWeight.Bold
+                else -> FontWeight.Medium
+            }
+            Text(
+                text = model.date.dayOfMonth.toString(),
+                color = numColor,
+                fontSize = 14.5.sp,
+                fontWeight = numWeight
+            )
+        }
 
-            if (model.dots.isNotEmpty()) {
-                Spacer(Modifier.height(2.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    model.dots.take(5).forEach { dot ->
-                        Box(
-                            Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(dot.color)
-                                .then(if (dot.end) Modifier.border(1.6.dp, MagC, CircleShape) else Modifier)
-                        )
-                    }
+        // 전체 보기 점: 숫자 아래 고정 위치
+        if (model.dots.isNotEmpty()) {
+            Row(
+                modifier = Modifier.align(Alignment.Center).offset(y = 23.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                model.dots.take(5).forEach { dot ->
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(dot.color)
+                            .then(if (dot.end) Modifier.border(1.6.dp, MagC, CircleShape) else Modifier)
+                    )
                 }
             }
+        }
 
-            if (model.holName != null) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = Holidays.shortName(model.holName),
-                    color = if (model.holActive) RedText else DimCol,
-                    fontSize = 8.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
-                )
-            }
+        // 공휴일 이름: 숫자 아래 고정 위치 (숫자 위치는 흔들리지 않음)
+        if (model.holName != null) {
+            Text(
+                text = Holidays.shortName(model.holName),
+                color = if (model.holActive) RedText else DimCol,
+                fontSize = 8.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .offset(y = 25.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 1.dp)
+            )
         }
     }
 }

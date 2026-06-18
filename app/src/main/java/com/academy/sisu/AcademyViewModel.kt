@@ -32,6 +32,7 @@ class AcademyViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private var paintAdd = true
+    private var paintSnapshot: Set<LocalDate> = emptySet()
 
     init {
         students.addAll(repo.loadStudents())
@@ -95,6 +96,7 @@ class AcademyViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 방학: 길게 눌러 + 끌어서 칠하기 ----------
     /** @return true 면 '추가' 모드, false 면 '해제' 모드 */
     fun startPaint(d: LocalDate): Boolean {
+        paintSnapshot = vacations
         paintAdd = !vacations.contains(d)
         vacations = if (paintAdd) vacations + d else vacations - d
         return paintAdd
@@ -102,6 +104,11 @@ class AcademyViewModel(app: Application) : AndroidViewModel(app) {
 
     fun paint(d: LocalDate) {
         vacations = if (paintAdd) vacations + d else vacations - d
+    }
+
+    /** 칠하기 도중 취소(좌우 스와이프 등) 시 시작 전 상태로 되돌림 (저장 안 함) */
+    fun cancelPaint() {
+        vacations = paintSnapshot
     }
 
     fun commitPaint() {

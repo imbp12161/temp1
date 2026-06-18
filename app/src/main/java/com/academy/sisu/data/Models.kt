@@ -4,8 +4,7 @@ import java.time.LocalDate
 
 /** 학생 표시 색상 팔레트 (ARGB Long). Compose 에서 Color(student.color) 로 사용. */
 val PALETTE: List<Long> = listOf(
-    0xFF3B82F6L, 0xFF22C55EL, 0xFFEAB308L, 0xFFA855F7L, 0xFFEC4899L,
-    0xFF14B8A6L, 0xFFF97316L, 0xFF06B6D4L, 0xFF84CC16L, 0xFFF43F5EL
+    0xFF3B82F6L, 0xFF22C55EL, 0xFFEAB308L, 0xFFA855F7L, 0xFFEC4899L, 0xFF14B8A6L
 )
 
 /** 선택 가능한 수업 시수 */
