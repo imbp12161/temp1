@@ -38,22 +38,48 @@ class Repository(context: Context) {
     fun loadSelected(): String = sp.getString(KEY_SEL, "all") ?: "all"
     fun saveSelected(s: String) { sp.edit().putString(KEY_SEL, s).apply() }
 
+    // ---------- groups (반) ----------
+    fun loadGroups(): List<String> {
+        val raw = sp.getString(KEY_GROUPS, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            val out = ArrayList<String>()
+            for (i in 0 until arr.length()) {
+                val g = arr.optString(i)
+                if (g.isNotBlank()) out.add(g)
+            }
+            out
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveGroups(list: List<String>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(it) }
+        sp.edit().putString(KEY_GROUPS, arr.toString()).apply()
+    }
+
     // ---------- export / import ----------
-    fun exportJson(students: List<Student>, vac: Set<LocalDate>, holOff: Set<LocalDate>): String {
+    fun exportJson(students: List<Student>, vac: Set<LocalDate>, holOff: Set<LocalDate>, groups: List<String>): String {
         val o = JSONObject()
         o.put("app", "sisu-calendar")
-        o.put("version", 2)
+        o.put("version", 3)
         o.put("exportedAt", Instant.now().toString())
         o.put("students", studentsToJson(students))
         o.put("vacations", dateSetToJson(vac))
         o.put("holOff", dateSetToJson(holOff))
+        val g = JSONArray()
+        groups.forEach { g.put(it) }
+        o.put("groups", g)
         return o.toString(2)
     }
 
     data class ImportData(
         val students: List<Student>,
         val vacations: Set<LocalDate>,
-        val holOff: Set<LocalDate>
+        val holOff: Set<LocalDate>,
+        val groups: List<String>
     )
 
     fun importJson(text: String): ImportData {
@@ -61,7 +87,15 @@ class Repository(context: Context) {
         val students = parseStudents(o.optJSONArray("students") ?: JSONArray())
         val vac = parseDateArray(o.optJSONArray("vacations"))
         val holOff = parseDateArray(o.optJSONArray("holOff"))
-        return ImportData(students, vac, holOff)
+        val groupsArr = o.optJSONArray("groups")
+        val groups = ArrayList<String>()
+        if (groupsArr != null) {
+            for (i in 0 until groupsArr.length()) {
+                val gg = groupsArr.optString(i)
+                if (gg.isNotBlank()) groups.add(gg)
+            }
+        }
+        return ImportData(students, vac, holOff, groups)
     }
 
     // ---------- helpers ----------
@@ -77,6 +111,7 @@ class Repository(context: Context) {
             o.put("sessions", s.sessions)
             o.put("start", s.start.toString())
             o.put("color", s.color)
+            o.put("group", s.group)
             o.put("createdAt", s.createdAt)
             arr.put(o)
         }
@@ -99,6 +134,7 @@ class Repository(context: Context) {
                     sessions = o.optInt("sessions", 12),
                     start = start,
                     color = o.optLong("color", PALETTE[0]),
+                    group = o.optString("group", ""),
                     createdAt = o.optLong("createdAt", System.currentTimeMillis())
                 )
             )
@@ -131,5 +167,6 @@ class Repository(context: Context) {
         private const val KEY_VAC = "vacations"
         private const val KEY_HOLOFF = "holOff"
         private const val KEY_SEL = "selected"
+        private const val KEY_GROUPS = "groups"
     }
 }

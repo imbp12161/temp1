@@ -18,6 +18,7 @@ class AcademyViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository(app)
 
     val students = mutableStateListOf<Student>()
+    val groups = mutableStateListOf<String>()
 
     var vacations by mutableStateOf<Set<LocalDate>>(emptySet())
         private set
@@ -36,6 +37,7 @@ class AcademyViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         students.addAll(repo.loadStudents())
+        groups.addAll(repo.loadGroups())
         vacations = repo.loadVacations()
         holOff = repo.loadHolOff()
         selected = repo.loadSelected()
@@ -56,15 +58,50 @@ class AcademyViewModel(app: Application) : AndroidViewModel(app) {
         return PALETTE.firstOrNull { it !in used } ?: PALETTE[students.size % PALETTE.size]
     }
 
-    fun addStudent(name: String, weekdays: List<Int>, sessions: Int, start: LocalDate, color: Long): String {
+    private fun ensureGroup(name: String) {
+        val n = name.trim()
+        if (n.isNotEmpty() && !groups.contains(n)) {
+            groups.add(n)
+            repo.saveGroups(groups.toList())
+        }
+    }
+
+    fun addGroup(name: String) = ensureGroup(name)
+
+    fun renameGroup(old: String, newName: String) {
+        val n = newName.trim()
+        val idx = groups.indexOf(old)
+        if (n.isEmpty() || idx < 0 || (n != old && groups.contains(n))) return
+        groups[idx] = n
+        for (i in students.indices) {
+            if (students[i].group == old) students[i] = students[i].copy(group = n)
+        }
+        repo.saveGroups(groups.toList())
+        repo.saveStudents(students)
+        calcVersion++
+    }
+
+    fun deleteGroup(name: String) {
+        if (groups.remove(name)) {
+            for (i in students.indices) {
+                if (students[i].group == name) students[i] = students[i].copy(group = "")
+            }
+            repo.saveGroups(groups.toList())
+            repo.saveStudents(students)
+            calcVersion++
+        }
+    }
+
+    fun addStudent(name: String, weekdays: List<Int>, sessions: Int, start: LocalDate, color: Long, group: String): String {
         val id = "s" + System.currentTimeMillis().toString(36) + UUID.randomUUID().toString().take(4)
-        students.add(Student(id, name.trim(), weekdays.distinct().sorted(), sessions, start, color))
+        students.add(Student(id, name.trim(), weekdays.distinct().sorted(), sessions, start, color, group.trim()))
+        ensureGroup(group)
         repo.saveStudents(students)
         select(id)
         return id
     }
 
-    fun updateStudent(id: String, name: String, weekdays: List<Int>, sessions: Int, start: LocalDate, color: Long) {
+    fun updateStudent(id: String, name: String, weekdays: List<Int>, sessions: Int, start: LocalDate, color: Long, group: String) {
         val i = students.indexOfFirst { it.id == id }
         if (i >= 0) {
             students[i] = students[i].copy(
@@ -72,8 +109,10 @@ class AcademyViewModel(app: Application) : AndroidViewModel(app) {
                 weekdays = weekdays.distinct().sorted(),
                 sessions = sessions,
                 start = start,
-                color = color
+                color = color,
+                group = group.trim()
             )
+            ensureGroup(group)
             repo.saveStudents(students)
             calcVersion++
         }
@@ -130,16 +169,19 @@ class AcademyViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- 백업 ----------
-    fun exportString(): String = repo.exportJson(students.toList(), vacations, holOff)
+    fun exportString(): String = repo.exportJson(students.toList(), vacations, holOff, groups.toList())
 
     fun importFrom(text: String): Boolean = try {
         val data = repo.importJson(text)
         students.clear()
         students.addAll(data.students)
+        groups.clear()
+        groups.addAll(data.groups)
         vacations = data.vacations
         holOff = data.holOff
         select("all")
         repo.saveStudents(students)
+        repo.saveGroups(groups.toList())
         repo.saveVacations(vacations)
         repo.saveHolOff(holOff)
         calcVersion++

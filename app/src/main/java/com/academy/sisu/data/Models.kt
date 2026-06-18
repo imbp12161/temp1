@@ -23,6 +23,7 @@ data class Student(
     val sessions: Int,
     val start: LocalDate,
     val color: Long,
+    val group: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )
 

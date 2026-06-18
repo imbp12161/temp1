@@ -150,6 +150,9 @@ fun StudentSheetContent(
     var sessions by remember(editing) { mutableStateOf(editing?.sessions ?: 12) }
     var start by remember(editing) { mutableStateOf(editing?.start ?: LocalDate.now()) }
     var color by remember(editing) { mutableStateOf(editing?.color ?: vm.nextColor()) }
+    var group by remember(editing) { mutableStateOf(editing?.group ?: "") }
+    var newGroupMode by remember(editing) { mutableStateOf(false) }
+    var newGroupText by remember(editing) { mutableStateOf("") }
     var showDate by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var showColorPicker by remember { mutableStateOf(false) }
@@ -284,6 +287,49 @@ fun StudentSheetContent(
         }
         Spacer(Modifier.height(20.dp))
 
+        // 그룹(반)
+        FieldLabel("그룹 (반)")
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            GroupChip("미분류", selected = group.isBlank() && !newGroupMode) {
+                group = ""; newGroupMode = false
+            }
+            vm.groups.forEach { g ->
+                GroupChip(g, selected = !newGroupMode && group == g) {
+                    group = g; newGroupMode = false
+                }
+            }
+            GroupChip("+ 새 그룹", selected = newGroupMode) {
+                newGroupMode = true
+                group = newGroupText
+            }
+        }
+        if (newGroupMode) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = newGroupText,
+                onValueChange = { newGroupText = it; group = it },
+                placeholder = { Text("새 그룹 이름 (예: 월수금 7시반)", color = DimCol) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = TextCol,
+                    unfocusedTextColor = TextCol,
+                    focusedContainerColor = Bg2,
+                    unfocusedContainerColor = Bg2,
+                    cursorColor = Accent,
+                    focusedBorderColor = Accent,
+                    unfocusedBorderColor = LineCol
+                )
+            )
+        }
+        Spacer(Modifier.height(20.dp))
+
         // 액션
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             if (editing != null) {
@@ -307,10 +353,10 @@ fun StudentSheetContent(
                 }
                 val wd = weekdays.toList().sorted()
                 if (editing == null) {
-                    vm.addStudent(name.trim(), wd, sessions, start, color)
+                    vm.addStudent(name.trim(), wd, sessions, start, color, group)
                     onToast("학생이 등록되었습니다")
                 } else {
-                    vm.updateStudent(editing.id, name.trim(), wd, sessions, start, color)
+                    vm.updateStudent(editing.id, name.trim(), wd, sessions, start, color, group)
                     onToast("수정되었습니다")
                 }
                 onClose()
@@ -615,5 +661,151 @@ private fun Badge(text: String, fg: Color, bg: Color) {
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
         Text(text, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+/* ============================== 그룹 칩 / 그룹 관리 ============================== */
+
+@Composable
+private fun GroupChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (selected) Surface3 else Surface2)
+            .border(1.dp, if (selected) Accent else LineCol, RoundedCornerShape(999.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 13.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = text,
+            color = if (selected) TextCol else MutedCol,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+fun GroupManageSheetContent(vm: AcademyViewModel, onClose: () -> Unit) {
+    var newName by remember { mutableStateOf("") }
+    var renameTarget by remember { mutableStateOf<String?>(null) }
+    var renameText by remember { mutableStateOf("") }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text("그룹 (반) 관리", color = TextCol, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "학생을 반별로 묶어 관리할 수 있어요. 그룹을 삭제하면 소속 학생은 '미분류'로 이동합니다.",
+            color = MutedCol, fontSize = 12.5.sp
+        )
+        Spacer(Modifier.height(16.dp))
+
+        FieldLabel("새 그룹 추가")
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                placeholder = { Text("그룹 이름", color = DimCol) },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = TextCol,
+                    unfocusedTextColor = TextCol,
+                    focusedContainerColor = Bg2,
+                    unfocusedContainerColor = Bg2,
+                    cursorColor = Accent,
+                    focusedBorderColor = Accent,
+                    unfocusedBorderColor = LineCol
+                )
+            )
+            PrimaryButton("추가") {
+                if (newName.isNotBlank()) {
+                    vm.addGroup(newName)
+                    newName = ""
+                }
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+        FieldLabel("그룹 목록")
+        if (vm.groups.isEmpty()) {
+            Text(
+                "아직 그룹이 없습니다.",
+                color = DimCol, fontSize = 13.sp,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            vm.groups.forEach { g ->
+                val count = vm.students.count { it.group == g }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 5.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Surface2)
+                        .border(1.dp, LineCol, RoundedCornerShape(12.dp))
+                        .padding(start = 13.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(g, color = TextCol, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("학생 ${count}명", color = MutedCol, fontSize = 12.sp)
+                    }
+                    TextButton(onClick = { renameTarget = g; renameText = g }) {
+                        Text("이름변경", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(onClick = { vm.deleteGroup(g) }) {
+                        Text("삭제", color = RedSkin, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+        PrimaryButton("닫기", modifier = Modifier.fillMaxWidth()) { onClose() }
+    }
+
+    val target = renameTarget
+    if (target != null) {
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            containerColor = Surface2,
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.renameGroup(target, renameText)
+                    renameTarget = null
+                }) { Text("변경", color = Accent, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) { Text("취소", color = MutedCol) }
+            },
+            title = { Text("그룹 이름 변경", color = TextCol, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextCol,
+                        unfocusedTextColor = TextCol,
+                        focusedContainerColor = Bg2,
+                        unfocusedContainerColor = Bg2,
+                        cursorColor = Accent,
+                        focusedBorderColor = Accent,
+                        unfocusedBorderColor = LineCol
+                    )
+                )
+            }
+        )
     }
 }

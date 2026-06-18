@@ -80,7 +80,7 @@ private enum class SheetKind { Student, Menu, Holiday, DayDetail }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CalendarScreen(vm: AcademyViewModel) {
+fun CalendarScreen(vm: AcademyViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val today = remember { LocalDate.now() }
@@ -166,6 +166,16 @@ fun CalendarScreen(vm: AcademyViewModel) {
                     .padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onBack() }
+                        .padding(start = 2.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "학생 목록", tint = TextCol)
+                    Text("목록", color = TextCol, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = { openAdd() }) {
                     Icon(Icons.Filled.Add, contentDescription = "학생 추가", tint = TextCol)
