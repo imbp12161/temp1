@@ -2,7 +2,6 @@ package com.academy.sisu.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,15 +47,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.academy.sisu.AcademyViewModel
-import com.academy.sisu.R
 import com.academy.sisu.data.SessionEngine
 import com.academy.sisu.data.Student
 import com.academy.sisu.data.Summary
@@ -163,19 +159,13 @@ fun CalendarScreen(vm: AcademyViewModel) {
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            // ===== 헤더 (로고 + 액션) =====
+            // ===== 헤더 (액션 버튼) =====
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 4.dp),
+                    .padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Image(
-                    painter = painterResource(R.drawable.logo),
-                    contentDescription = "로고",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.height(30.dp)
-                )
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = { openAdd() }) {
                     Icon(Icons.Filled.Add, contentDescription = "학생 추가", tint = TextCol)
