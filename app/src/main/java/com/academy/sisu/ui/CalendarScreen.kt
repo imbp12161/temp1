@@ -223,7 +223,9 @@ fun CalendarScreen(vm: AcademyViewModel) {
                         today = today,
                         caches = caches,
                         onDayTap = { openDay(it) },
-                        onToast = { toast = it }
+                        onToast = { toast = it },
+                        onPrevMonth = { viewedMonth = viewedMonth.minusMonths(1) },
+                        onNextMonth = { viewedMonth = viewedMonth.plusMonths(1) }
                     )
                 }
             }

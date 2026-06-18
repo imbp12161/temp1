@@ -29,6 +29,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -42,7 +43,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -149,6 +152,7 @@ fun StudentSheetContent(
     var color by remember(editing) { mutableStateOf(editing?.color ?: vm.nextColor()) }
     var showDate by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
+    var showColorPicker by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -258,6 +262,27 @@ fun StudentSheetContent(
                         .clickable { color = c }
                 )
             }
+            val isCustom = color !in PALETTE
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.sweepGradient(
+                            listOf(
+                                Color(0xFFFF3B30), Color(0xFFFFCC00), Color(0xFF34C759),
+                                Color(0xFF00C7BE), Color(0xFF007AFF), Color(0xFFAF52DE),
+                                Color(0xFFFF2D55), Color(0xFFFF3B30)
+                            )
+                        )
+                    )
+                    .border(
+                        width = if (isCustom) 3.dp else 0.dp,
+                        color = if (isCustom) Color.White else Color.Transparent,
+                        shape = CircleShape
+                    )
+                    .clickable { showColorPicker = true }
+            )
         }
         Spacer(Modifier.height(20.dp))
 
@@ -331,6 +356,63 @@ fun StudentSheetContent(
             text = { Text("이 학생을 삭제할까요? 되돌릴 수 없습니다.") }
         )
     }
+
+    if (showColorPicker) {
+        ColorPickerDialog(
+            initial = color,
+            onPick = { color = it; showColorPicker = false },
+            onDismiss = { showColorPicker = false }
+        )
+    }
+}
+
+@Composable
+private fun ColorPickerDialog(
+    initial: Long,
+    onPick: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val hsv0 = remember {
+        FloatArray(3).also { android.graphics.Color.colorToHSV(initial.toInt(), it) }
+    }
+    var hue by remember { mutableStateOf(hsv0[0]) }
+    var sat by remember { mutableStateOf(hsv0[1]) }
+    var value by remember { mutableStateOf(hsv0[2].coerceAtLeast(0.06f)) }
+
+    val current = Color.hsv(hue.coerceIn(0f, 360f), sat.coerceIn(0f, 1f), value.coerceIn(0f, 1f))
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Surface2,
+        confirmButton = {
+            TextButton(onClick = { onPick(current.toArgb().toLong() and 0xFFFFFFFFL) }) {
+                Text("선택", color = TextCol, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("취소", color = MutedCol) }
+        },
+        title = { Text("색상 선택", color = TextCol, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(current)
+                        .border(1.dp, LineCol, RoundedCornerShape(12.dp))
+                )
+                Spacer(Modifier.height(16.dp))
+                Text("색조(Hue)", color = MutedCol, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f)
+                Text("채도(Saturation)", color = MutedCol, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                Slider(value = sat, onValueChange = { sat = it }, valueRange = 0f..1f)
+                Text("밝기(Value)", color = MutedCol, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                Slider(value = value, onValueChange = { value = it }, valueRange = 0f..1f)
+            }
+        }
+    )
 }
 
 /* ============================== 메뉴 ============================== */
