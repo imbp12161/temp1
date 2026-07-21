@@ -1,0 +1,209 @@
+package com.academy.sisu.data
+
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+import java.time.Instant
+import java.time.LocalDate
+
+/** SharedPreferences + JSON 기반 로컬 저장소. (기기에만 저장됩니다) */
+class Repository(context: Context) {
+
+    private val sp = context.applicationContext
+        .getSharedPreferences("sisu_store", Context.MODE_PRIVATE)
+
+    // ---------- students ----------
+    fun loadStudents(): List<Student> = try {
+        val raw = sp.getString(KEY_STUDENTS, null) ?: return emptyList()
+        parseStudents(JSONArray(raw))
+    } catch (e: Exception) { emptyList() }
+
+    fun saveStudents(list: List<Student>) {
+        sp.edit().putString(KEY_STUDENTS, studentsToJson(list).toString()).apply()
+    }
+
+    // ---------- vacations ----------
+    fun loadVacations(): Set<LocalDate> = parseDateSet(sp.getString(KEY_VAC, null))
+    fun saveVacations(set: Set<LocalDate>) {
+        sp.edit().putString(KEY_VAC, dateSetToJson(set).toString()).apply()
+    }
+
+    // ---------- holiday off (수업일로 처리할 공휴일) ----------
+    fun loadHolOff(): Set<LocalDate> = parseDateSet(sp.getString(KEY_HOLOFF, null))
+    fun saveHolOff(set: Set<LocalDate>) {
+        sp.edit().putString(KEY_HOLOFF, dateSetToJson(set).toString()).apply()
+    }
+
+    // ---------- selected ----------
+    fun loadSelected(): String = sp.getString(KEY_SEL, "all") ?: "all"
+    fun saveSelected(s: String) { sp.edit().putString(KEY_SEL, s).apply() }
+
+    // ---------- groups (반) ----------
+    fun loadGroups(): List<String> {
+        val raw = sp.getString(KEY_GROUPS, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            val out = ArrayList<String>()
+            for (i in 0 until arr.length()) {
+                val g = arr.optString(i)
+                if (g.isNotBlank()) out.add(g)
+            }
+            out
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveGroups(list: List<String>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(it) }
+        sp.edit().putString(KEY_GROUPS, arr.toString()).apply()
+    }
+
+    // ---------- export / import ----------
+    fun exportJson(students: List<Student>, vac: Set<LocalDate>, holOff: Set<LocalDate>, groups: List<String>): String {
+        val o = JSONObject()
+        o.put("app", "sisu-calendar")
+        o.put("version", 3)
+        o.put("exportedAt", Instant.now().toString())
+        o.put("students", studentsToJson(students))
+        o.put("vacations", dateSetToJson(vac))
+        o.put("holOff", dateSetToJson(holOff))
+        val g = JSONArray()
+        groups.forEach { g.put(it) }
+        o.put("groups", g)
+        return o.toString(2)
+    }
+
+    data class ImportData(
+        val students: List<Student>,
+        val vacations: Set<LocalDate>,
+        val holOff: Set<LocalDate>,
+        val groups: List<String>
+    )
+
+    fun importJson(text: String): ImportData {
+        val o = JSONObject(text)
+        val students = parseStudents(o.optJSONArray("students") ?: JSONArray())
+        val vac = parseDateArray(o.optJSONArray("vacations"))
+        val holOff = parseDateArray(o.optJSONArray("holOff"))
+        val groupsArr = o.optJSONArray("groups")
+        val groups = ArrayList<String>()
+        if (groupsArr != null) {
+            for (i in 0 until groupsArr.length()) {
+                val gg = groupsArr.optString(i)
+                if (gg.isNotBlank()) groups.add(gg)
+            }
+        }
+        return ImportData(students, vac, holOff, groups)
+    }
+
+    // ---------- helpers ----------
+    private fun studentsToJson(list: List<Student>): JSONArray {
+        val arr = JSONArray()
+        for (s in list) {
+            val o = JSONObject()
+            o.put("id", s.id)
+            o.put("name", s.name)
+            val wd = JSONArray()
+            s.weekdays.forEach { wd.put(it) }
+            o.put("weekdays", wd)
+            o.put("sessions", s.sessions)
+            o.put("start", s.start.toString())
+            o.put("color", s.color)
+            o.put("group", s.group)
+            val sch = JSONArray()
+            s.schedules.forEach { sc ->
+                val so = JSONObject()
+                so.put("from", sc.from.toString())
+                val swd = JSONArray()
+                sc.weekdays.forEach { swd.put(it) }
+                so.put("weekdays", swd)
+                sch.put(so)
+            }
+            o.put("schedules", sch)
+            val off = JSONArray()
+            s.offDays.forEach { off.put(it.toString()) }
+            o.put("offDays", off)
+            o.put("createdAt", s.createdAt)
+            arr.put(o)
+        }
+        return arr
+    }
+
+    private fun parseStudents(arr: JSONArray): List<Student> {
+        val out = ArrayList<Student>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val wdArr = o.optJSONArray("weekdays") ?: JSONArray()
+            val wd = ArrayList<Int>()
+            for (j in 0 until wdArr.length()) wd.add(wdArr.optInt(j))
+            val start = try { LocalDate.parse(o.optString("start")) } catch (e: Exception) { LocalDate.now() }
+            val schArr = o.optJSONArray("schedules")
+            val schedules = ArrayList<Schedule>()
+            if (schArr != null && schArr.length() > 0) {
+                for (k in 0 until schArr.length()) {
+                    val so = schArr.optJSONObject(k) ?: continue
+                    val f = try { LocalDate.parse(so.optString("from")) } catch (e: Exception) { start }
+                    val swdArr = so.optJSONArray("weekdays") ?: JSONArray()
+                    val swd = ArrayList<Int>()
+                    for (j in 0 until swdArr.length()) swd.add(swdArr.optInt(j))
+                    schedules.add(Schedule(f, swd.filter { it in 1..7 }.distinct().sorted()))
+                }
+            }
+            if (schedules.isEmpty()) {
+                schedules.add(Schedule(start, wd.filter { it in 1..7 }.distinct().sorted()))
+            }
+            schedules.sortBy { it.from }
+            val offArr = o.optJSONArray("offDays")
+            val offDays = ArrayList<LocalDate>()
+            if (offArr != null) {
+                for (j in 0 until offArr.length()) {
+                    try { offDays.add(LocalDate.parse(offArr.optString(j))) } catch (e: Exception) {}
+                }
+            }
+            out.add(
+                Student(
+                    id = o.optString("id").ifBlank { "s" + System.nanoTime().toString(36) },
+                    name = o.optString("name"),
+                    schedules = schedules,
+                    sessions = o.optInt("sessions", 12),
+                    start = start,
+                    color = o.optLong("color", PALETTE[0]),
+                    group = o.optString("group", ""),
+                    offDays = offDays,
+                    createdAt = o.optLong("createdAt", System.currentTimeMillis())
+                )
+            )
+        }
+        return out
+    }
+
+    private fun dateSetToJson(set: Set<LocalDate>): JSONArray {
+        val arr = JSONArray()
+        set.forEach { arr.put(it.toString()) }
+        return arr
+    }
+
+    private fun parseDateSet(raw: String?): Set<LocalDate> {
+        if (raw.isNullOrBlank()) return emptySet()
+        return try { parseDateArray(JSONArray(raw)) } catch (e: Exception) { emptySet() }
+    }
+
+    private fun parseDateArray(arr: JSONArray?): Set<LocalDate> {
+        if (arr == null) return emptySet()
+        val out = LinkedHashSet<LocalDate>()
+        for (i in 0 until arr.length()) {
+            try { out.add(LocalDate.parse(arr.optString(i))) } catch (e: Exception) { /* skip */ }
+        }
+        return out
+    }
+
+    companion object {
+        private const val KEY_STUDENTS = "students"
+        private const val KEY_VAC = "vacations"
+        private const val KEY_HOLOFF = "holOff"
+        private const val KEY_SEL = "selected"
+        private const val KEY_GROUPS = "groups"
+    }
+}
